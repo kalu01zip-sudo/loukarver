@@ -132,8 +132,13 @@ class YouTubeMusicService:
                     "privacyStatus": "private"
                 }
             }
-            resp = await client.post(f"{url}?part=snippet,status", json=data, headers=headers)
-            resp.raise_for_status()
+            try:
+                resp = await client.post(f"{url}?part=snippet,status", json=data, headers=headers)
+                resp.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                error_detail = e.response.text
+                raise Exception(f"YouTube API Error: {error_detail}")
+            
             pl_id = resp.json()["id"]
             
             await self.user_links.update_one(
