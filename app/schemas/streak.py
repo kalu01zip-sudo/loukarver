@@ -7,15 +7,26 @@ class StreakResponse(BaseModel):
     last_completed_date: Optional[str]
     is_at_risk: bool
 
+class RitualDetail(BaseModel):
+    ritual_type: str
+    text: Optional[str] = None
+    file_path: Optional[str] = None
+    time: Optional[str] = None
+    time_name: Optional[str] = None
+
 class DayBreakdown(BaseModel):
     label: str
     date: str
     completed: bool
     ritual_type: Optional[str] = None
+    time: Optional[str] = None
+    time_name: Optional[str] = None
+    data: List[RitualDetail] = []
 
 class StreakWeeklyResponse(BaseModel):
     days: List[DayBreakdown]
     week_completion_rate: int
+    current_streak: int
 
 class StreakPartnerResponse(BaseModel):
     partner_name: str

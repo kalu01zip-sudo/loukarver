@@ -3,6 +3,8 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from app.core.config import settings
 from app.schemas.checkin import CheckInCreate, CheckInUpdate
+from app.services.streak_algo import get_local_now
+from app.services.streak import get_time_name
 
 class CheckInService:
     def __init__(self) -> None:
@@ -52,12 +54,18 @@ class CheckInService:
         if existing:
             raise ValueError("You have already submitted a check-in for this date. Use PATCH to update.")
             
+        local_now = get_local_now(payload.timezone)
+        time_str = payload.time if payload.time else local_now.strftime("%I:%M %p")
+        time_name = payload.time_name if payload.time_name else get_time_name(local_now.hour)
+
         new_checkin = {
             "user_id": user_id,
             "date": payload.date,
             "answer_1": payload.answer_1,
             "answer_2": payload.answer_2,
-            "answer_3": payload.answer_3
+            "answer_3": payload.answer_3,
+            "time": time_str,
+            "time_name": time_name
         }
         
         result = await self.checkins_collection.insert_one(new_checkin)
@@ -82,8 +90,12 @@ class CheckInService:
         if payload.answer_3 is not None:
             updates["answer_3"] = payload.answer_3
             
-        if not updates:
-            raise ValueError("No fields provided to update.")
+        local_now = get_local_now(payload.timezone)
+        time_str = payload.time if payload.time else (existing.get("time") or local_now.strftime("%I:%M %p"))
+        time_name = payload.time_name if payload.time_name else (existing.get("time_name") or get_time_name(local_now.hour))
+        
+        updates["time"] = time_str
+        updates["time_name"] = time_name
             
         await self.checkins_collection.update_one(
             {"_id": existing["_id"]},

@@ -11,4 +11,6 @@ dependencies = [
     "pyjwt>=2.13.0",
     "python-dotenv>=1.2.2",
     "uvicorn>=0.49.0",
+    "python-multipart>=0.0.9",
+    "tzdata",
 ]
