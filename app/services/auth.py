@@ -200,12 +200,33 @@ class AuthService:
         }
 
     async def oauth_signin(self, provider: str, token: str) -> Dict[str, Any]:
-        import re
-        if re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", token):
-            email = token.lower()
+        import httpx
+        
+        email = None
+        name = "Google User"
+        
+        if provider == "google":
+            # Verify the Google ID Token
+            url = f"https://oauth2.googleapis.com/tokeninfo?id_token={token}"
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url)
+                if resp.status_code != 200:
+                    raise ValueError("Invalid Google token")
+                payload = resp.json()
+                email = payload.get("email", "").lower()
+                name = payload.get("name", email.split("@")[0].capitalize())
+                
+                if not email:
+                    raise ValueError("No email found in Google token")
         else:
-            email = f"{provider}-user@example.com".lower()
-            
+            # For Apple or mocked logic
+            import re
+            if re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", token):
+                email = token.lower()
+                name = email.split("@")[0].capitalize()
+            else:
+                raise ValueError("Invalid mocked token or unsupported provider")
+
         user = await self.collection.find_one({"email": email})
         if not user:
             # Auto-signup verified OAuth user
@@ -213,7 +234,7 @@ class AuthService:
             user = {
                 "email": email,
                 "password_hash": None,
-                "name": email.split("@")[0].capitalize(),
+                "name": name,
                 "is_verified": True,
                 "is_aligned": False,
                 "partner": None,
