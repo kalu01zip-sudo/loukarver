@@ -19,6 +19,12 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     FROM_EMAIL: str = ""
     
+    # YouTube Integration
+    YOUTUBE_CLIENT_ID: str = ""
+    YOUTUBE_CLIENT_SECRET: str = ""
+    YOUTUBE_REDIRECT_URI: str = ""
+    YOUTUBE_API_KEY: str = ""
+    
     # Read from .env if present
     model_config = SettingsConfigDict(
         env_file=".env",
