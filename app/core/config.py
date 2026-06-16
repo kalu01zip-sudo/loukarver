@@ -7,14 +7,14 @@ class Settings(BaseSettings):
     MONGO_DB_NAME: str = "loukarver"
     
     # JWT Secrets
-    SECRET_KEY: str = "default-access-secret"
-    REFRESH_SECRET_KEY: str = "default-refresh-secret"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    SECRET_KEY: str = ""
+    REFRESH_SECRET_KEY: str = ""
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = ""
+    REFRESH_TOKEN_EXPIRE_DAYS: int = ""
     
     # SMTP Settings
     SMTP_HOST: str = ""
-    SMTP_PORT: int = 587
+    SMTP_PORT: int = ""
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     FROM_EMAIL: str = ""
