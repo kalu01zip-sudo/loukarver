@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     YOUTUBE_REDIRECT_URI: str = ""
     YOUTUBE_API_KEY: str = ""
     
+    # Gemini Integration
+    GEMINI_API_KEY: str = ""
+    
     # Read from .env if present
     model_config = SettingsConfigDict(
         env_file=".env",
