@@ -9,6 +9,7 @@ class NotificationType(str, Enum):
     MILESTONE = "Milestone"
     SYSTEM = "System"
     MAP_UPDATE = "Map Update"
+    VIBE_DATE = "Vibe Date"
 
 class NotificationStatus(str, Enum):
     SCHEDULED = "Scheduled"

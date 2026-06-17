@@ -23,6 +23,8 @@ class DateStatus(str, Enum):
     ACCEPTED = "Accepted"
     REJECTED = "Rejected"
     COMPLETED = "Completed"
+    CHANGES_RECOMMENDED = "ChangesRecommended"
+    NEEDS_RECONFIRMATION = "NeedsReconfirmation"
 
 class DateReview(BaseModel):
     user_id: str
@@ -41,25 +43,30 @@ class DateReviewsResponse(BaseModel):
     data: List[DateReviewRead]
 
 class DateBase(BaseModel):
-    city_name: str
-    mood: DateMood
-    vibe: DateVibe
-    time: str = Field(..., description="Time of the date, e.g. '09:00 PM'")
+    where: str = Field(..., description="Location name or place")
     date: str = Field(..., description="Date of the date, e.g. '12.25.2023'")
-    timezone: str = Field(..., description="IANA Timezone, e.g., Asia/Dhaka")
+    time: str = Field(..., description="Time of the date, e.g. '09:00 PM'")
     how_we_meet: str
+    note: Optional[str] = None
+    timezone: str = Field(..., description="IANA Timezone, e.g., Asia/Dhaka")
+    # Optional fields from previous implementation
+    city_name: Optional[str] = None
+    mood: Optional[DateMood] = None
+    vibe: Optional[DateVibe] = None
 
 class DateCreate(DateBase):
     pass
 
 class DateUpdate(BaseModel):
+    where: Optional[str] = None
+    date: Optional[str] = None
+    time: Optional[str] = None
+    how_we_meet: Optional[str] = None
+    note: Optional[str] = None
+    timezone: Optional[str] = None
     city_name: Optional[str] = None
     mood: Optional[DateMood] = None
     vibe: Optional[DateVibe] = None
-    time: Optional[str] = None
-    date: Optional[str] = None
-    timezone: Optional[str] = None
-    how_we_meet: Optional[str] = None
 
 class DateResponse(DateBase):
     id: str
@@ -80,7 +87,14 @@ class DatePaginatedResponse(BaseModel):
     size: int
 
 class DateRespond(BaseModel):
-    accept: bool
+    action: str = Field(..., description="Action to take: 'accept', 'reject', or 'recommend_changes'")
+    # Fields to update if recommending changes
+    where: Optional[str] = None
+    date: Optional[str] = None
+    time: Optional[str] = None
+    how_we_meet: Optional[str] = None
+    note: Optional[str] = None
+    timezone: Optional[str] = None
 
 class DateReviewCreate(BaseModel):
     rating: int = Field(..., ge=1, le=5)

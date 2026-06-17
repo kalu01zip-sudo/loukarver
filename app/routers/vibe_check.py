@@ -4,11 +4,44 @@ from app.routers.auth import get_current_user
 from app.schemas.vibe_check import (
     VibeCheckProfileCreate, VibeCheckProfileResponse, VibeCheckGenericResponse,
     VibeCheckConnectRequest, VibeCheckConnectionsResponse, VibeCheckRequestsResponse,
-    VibeCheckRespondRequest
+    VibeCheckRespondRequest, VibeInviteResponse, VibeInviteValidateResponse,
+    VibeInviteAcceptRequest, VibeInviteAcceptResponse
 )
 from app.services.vibe_check import vibe_check_service
 
 router = APIRouter(prefix="/vibecheck", tags=["VibeCheck"])
+
+# --- Invite System ---
+
+@router.post("/invite", response_model=VibeInviteResponse)
+async def generate_vibecheck_invite(current_user: dict = Depends(get_current_user)):
+    """Generate a unique invite link for VibeCheck."""
+    try:
+        return await vibe_check_service.generate_invite(current_user["id"])
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/invite/{invite_code}", response_model=VibeInviteValidateResponse)
+async def validate_vibecheck_invite(invite_code: str):
+    """Validate an invite code and return inviter info."""
+    try:
+        return await vibe_check_service.validate_invite(invite_code)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/invite/accept", response_model=VibeInviteAcceptResponse)
+async def accept_vibecheck_invite(payload: VibeInviteAcceptRequest, current_user: dict = Depends(get_current_user)):
+    """Accept an invite and connect with the inviter."""
+    try:
+        return await vibe_check_service.accept_invite(current_user["id"], payload.invite_code)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Existing Endpoints ---
 
 @router.get("/profile", response_model=VibeCheckProfileResponse)
 async def get_vibecheck_profile(current_user: dict = Depends(get_current_user)):

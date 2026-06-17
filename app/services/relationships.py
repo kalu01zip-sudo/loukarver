@@ -89,6 +89,7 @@ class RelationshipService:
             {
                 "$set": {
                     "is_aligned": True,
+                    "secret_key": None, # Disable secret key
                     "partner": {
                         "user_id": str(partner["_id"]),
                         "name": partner["name"],
@@ -106,6 +107,7 @@ class RelationshipService:
             {
                 "$set": {
                     "is_aligned": True,
+                    "secret_key": None, # Disable secret key
                     "partner": {
                         "user_id": str(initiator["_id"]),
                         "name": initiator["name"],
@@ -211,5 +213,65 @@ class RelationshipService:
             updated_initiator["_id"] = str(updated_initiator["_id"])
             
         return updated_initiator
+
+    async def align_users_mutually(self, user_id: str, partner_id: str) -> bool:
+        """Directly aligns two users (mutually). Clears secret keys for both."""
+        from bson import ObjectId
+        
+        user = await self.collection.find_one({"_id": ObjectId(user_id)})
+        partner = await self.collection.find_one({"_id": ObjectId(partner_id)})
+        
+        if not user or not partner:
+            return False
+            
+        if user.get("is_aligned") or partner.get("is_aligned"):
+            # If already aligned with the SAME partner, it's fine (idempotent)
+            if user.get("partner", {}).get("user_id") == partner_id:
+                return True
+            return False
+
+        # Connect both
+        await self.collection.update_one(
+            {"_id": user["_id"]},
+            {"$set": {
+                "is_aligned": True,
+                "secret_key": None,
+                "partner": {
+                    "user_id": str(partner["_id"]),
+                    "name": partner["name"],
+                    "city_name": partner["city_name"],
+                    "relationship_start_date": partner["relationship_start_date"],
+                    "is_long_distance": partner["is_long_distance"]
+                }
+            }}
+        )
+        await self.collection.update_one(
+            {"_id": partner["_id"]},
+            {"$set": {
+                "is_aligned": True,
+                "secret_key": None,
+                "partner": {
+                    "user_id": str(user["_id"]),
+                    "name": user["name"],
+                    "city_name": user["city_name"],
+                    "relationship_start_date": user["relationship_start_date"],
+                    "is_long_distance": user["is_long_distance"]
+                }
+            }}
+        )
+        return True
+
+    async def get_relationship_profile(self, user_id: str) -> Dict[str, Any]:
+        """Retrieves a user's relationship profile."""
+        from bson import ObjectId
+        user = await self.collection.find_one({"_id": ObjectId(user_id)})
+        if not user:
+            raise ValueError("User not found.")
+            
+        if "_id" in user:
+            user["id"] = str(user["_id"])
+            user["_id"] = str(user["_id"])
+            
+        return user
 
 relationship_service = RelationshipService()

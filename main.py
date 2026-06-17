@@ -3,7 +3,7 @@ from fastapi.staticfiles import StaticFiles
 import os
 from app.routers import (
     relationships, auth, checkin, rituals, streak, us, 
-    music, mood, lifecycle, energy, ideas, interactions, watch, secret, dates, thread, milestone, map, notification, vibe_check, vibe_card
+    music, mood, lifecycle, energy, ideas, interactions, watch, secret, dates, thread, milestone, map, notification, vibe_check, vibe_card, play, vibe_dates, vibe_pulse
 )
 from app.services.streak import streak_system
 from app.services.mood import mood_service
@@ -17,6 +17,9 @@ from app.services.map import map_service
 from app.services.notification import notification_service
 from app.services.vibe_check import vibe_check_service
 from app.services.vibe_card import vibe_card_service
+from app.services.play import play_service
+from app.services.vibe_dates import vibe_date_service
+from app.services.vibe_pulse import vibe_pulse_service
 from app.core.config import settings
 
 app = FastAPI(
@@ -39,6 +42,8 @@ async def startup_event():
     await notification_service.init_indexes()
     await vibe_check_service.init_indexes()
     await vibe_card_service.init_indexes()
+    await vibe_date_service.init_indexes()
+    await vibe_pulse_service.init_indexes()
 
 # Include Routers
 app.include_router(relationships.router)
@@ -62,6 +67,9 @@ app.include_router(map.router)
 app.include_router(notification.router)
 app.include_router(vibe_check.router)
 app.include_router(vibe_card.router)
+app.include_router(play.router)
+app.include_router(vibe_dates.router)
+app.include_router(vibe_pulse.router)
 
 # Mount StaticFiles for uploaded files
 os.makedirs("uploads", exist_ok=True)

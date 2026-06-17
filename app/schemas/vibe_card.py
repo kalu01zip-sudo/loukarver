@@ -50,6 +50,10 @@ class VibeMatchResult(BaseModel):
     cumulative_match_percent: float
     matched_answers: List[VibeMatchedAnswer]
 
+class VibeMultiMatchResult(BaseModel):
+    success: bool
+    data: List[VibeMatchResult]
+
 class VibeStreakResponse(BaseModel):
     current_streak: int
     last_answered: Optional[datetime] = None
@@ -58,3 +62,24 @@ class VibeStreakResponse(BaseModel):
 class GenericResponse(BaseModel):
     success: bool
     message: str
+
+# --- History System ---
+
+class VibeHistoryEntry(BaseModel):
+    date: str
+    question: str
+    option_a: str
+    option_b: str
+    user_name: str
+    user_answer: str
+    partner_name: str
+    partner_answer: str
+    is_match: bool
+
+class VibeHistoryPaginatedResponse(BaseModel):
+    success: bool
+    data: List[VibeHistoryEntry]
+    total: int
+    page: int
+    size: int
+    category: str

@@ -5,6 +5,24 @@ from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
+@router.get("", response_model=RelationshipResponse, status_code=status.HTTP_200_OK)
+async def get_user_profile(current_user: dict = Depends(get_current_user)):
+    """
+    Retrieves the relationship profile details of the authenticated user.
+    """
+    try:
+        data = await relationship_service.get_relationship_profile(current_user["id"])
+        return RelationshipResponse(
+            success=True,
+            message="Relationship details retrieved successfully!",
+            data=data
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred retrieving relationship data: {str(e)}"
+        )
+
 @router.post("/create", response_model=RelationshipResponse, status_code=status.HTTP_201_CREATED)
 async def create_relationship(submission: RelationshipCreate, current_user: dict = Depends(get_current_user)):
     """

@@ -70,8 +70,6 @@ class DateService:
         return await self._map_date(new_doc, payload.timezone)
 
     async def get_dates(self, user_id: str, status: Optional[str] = None, page: int = 1, size: int = 10, user_timezone: str = "UTC") -> Tuple[List[Dict[str, Any]], int]:
-        partner_id = await self._get_partner_id(user_id)
-        
         query = {"$or": [{"creator_id": user_id}, {"partner_id": user_id}]}
         if status:
             query["status"] = status
@@ -93,22 +91,35 @@ class DateService:
         return None
 
     async def update_date(self, date_id: str, user_id: str, payload: DateUpdate) -> Optional[Dict[str, Any]]:
-        existing = await self.dates_collection.find_one({"_id": ObjectId(date_id), "creator_id": user_id})
+        existing = await self.dates_collection.find_one({
+            "_id": ObjectId(date_id), 
+            "creator_id": user_id
+        })
         if not existing:
             raise ValueError("Date not found or you are not the creator.")
 
-        if existing["status"] != DateStatus.PROPOSED:
-            raise ValueError("Can only update dates in 'Proposed' status.")
+        allowed_statuses = [DateStatus.PROPOSED, DateStatus.ACCEPTED, DateStatus.CHANGES_RECOMMENDED, DateStatus.NEEDS_RECONFIRMATION]
+        if existing["status"] not in allowed_statuses:
+            raise ValueError(f"Cannot update date in '{existing['status']}' status.")
 
         updates = {k: v for k, v in payload.model_dump().items() if v is not None}
         if not updates:
-            return await self._map_date(existing, payload.timezone or "UTC")
+            return await self._map_date(existing, existing["timezone"])
 
         if any(k in updates for k in ["date", "time", "timezone"]):
             new_date = updates.get("date", existing["date"])
             new_time = updates.get("time", existing["time"])
             new_tz = updates.get("timezone", existing["timezone"])
             updates["utc_timestamp"] = parse_date_time(new_date, new_time, new_tz)
+
+        # Renegotiation logic:
+        # If it was already accepted, it needs reconfirmation
+        if existing["status"] == DateStatus.ACCEPTED:
+            updates["status"] = DateStatus.NEEDS_RECONFIRMATION
+            # In a real app, trigger push notification here
+            print(f"DEBUG: Push notification sent to partner {existing['partner_id']} for date {date_id}")
+        elif existing["status"] == DateStatus.CHANGES_RECOMMENDED:
+            updates["status"] = DateStatus.PROPOSED
 
         updates["updated_at"] = datetime.now(timezone.utc)
         
@@ -124,21 +135,58 @@ class DateService:
         return result.deleted_count > 0
 
     async def respond_to_date(self, date_id: str, user_id: str, response: DateRespond) -> Dict[str, Any]:
-        doc = await self.dates_collection.find_one({"_id": ObjectId(date_id), "partner_id": user_id})
+        doc = await self.dates_collection.find_one({
+            "_id": ObjectId(date_id),
+            "$or": [{"creator_id": user_id}, {"partner_id": user_id}]
+        })
         if not doc:
-            raise ValueError("Date not found or you are not the recipient.")
+            raise ValueError("Date not found.")
 
-        if doc["status"] != DateStatus.PROPOSED:
-            raise ValueError("Date already responded to.")
+        is_creator = doc["creator_id"] == user_id
+        is_partner = doc["partner_id"] == user_id
 
-        new_status = DateStatus.ACCEPTED if response.accept else DateStatus.REJECTED
+        if response.action == "accept":
+            if is_partner:
+                if doc["status"] not in [DateStatus.PROPOSED, DateStatus.NEEDS_RECONFIRMATION]:
+                    raise ValueError("Date is not in a state that you can accept.")
+            elif is_creator:
+                if doc["status"] != DateStatus.CHANGES_RECOMMENDED:
+                    raise ValueError("Partner has not recommended any changes to accept.")
+            new_status = DateStatus.ACCEPTED
+            updates = {"status": new_status}
+            
+        elif response.action == "reject":
+            new_status = DateStatus.REJECTED
+            updates = {"status": new_status}
+            
+        elif response.action == "recommend_changes":
+            if not is_partner:
+                raise ValueError("Only the partner can recommend changes.")
+            if doc["status"] not in [DateStatus.PROPOSED, DateStatus.ACCEPTED, DateStatus.NEEDS_RECONFIRMATION]:
+                raise ValueError("Cannot recommend changes in current status.")
+            
+            new_status = DateStatus.CHANGES_RECOMMENDED
+            updates = {"status": new_status}
+            
+            change_fields = {k: v for k, v in response.model_dump().items() if k != "action" and v is not None}
+            if change_fields:
+                updates.update(change_fields)
+                if any(k in change_fields for k in ["date", "time", "timezone"]):
+                    new_date = change_fields.get("date", doc["date"])
+                    new_time = change_fields.get("time", doc["time"])
+                    new_tz = change_fields.get("timezone", doc["timezone"])
+                    updates["utc_timestamp"] = parse_date_time(new_date, new_time, new_tz)
+        else:
+            raise ValueError("Invalid action. Use 'accept', 'reject', or 'recommend_changes'.")
+
+        updates["updated_at"] = datetime.now(timezone.utc)
         
         result = await self.dates_collection.find_one_and_update(
             {"_id": ObjectId(date_id)},
-            {"$set": {"status": new_status, "updated_at": datetime.now(timezone.utc)}},
+            {"$set": updates},
             return_document=True
         )
-        return await self._map_date(result, doc["timezone"])
+        return await self._map_date(result, updates.get("timezone", doc["timezone"]))
 
     async def complete_date(self, date_id: str, user_id: str) -> Dict[str, Any]:
         doc = await self.dates_collection.find_one({
@@ -173,7 +221,6 @@ class DateService:
         if doc["status"] != DateStatus.COMPLETED:
             raise ValueError("Reviews can only be added to completed dates.")
 
-        # Check if user already reviewed
         for r in doc.get("reviews", []):
             if r["user_id"] == user_id:
                 raise ValueError("You have already reviewed this date.")
@@ -221,7 +268,6 @@ class DateService:
         d["id"] = str(d["_id"])
         if "_id" in d: del d["_id"]
         
-        # Timezone conversion for date timestamps
         try:
             tz = zoneinfo.ZoneInfo(user_timezone)
         except Exception:
@@ -234,20 +280,16 @@ class DateService:
                     dt = dt.replace(tzinfo=timezone.utc)
                 d[field] = dt.astimezone(tz)
 
-        # Add names to reviews if they exist
         if d.get("reviews"):
             names = await self._get_names(d["creator_id"], d["partner_id"])
             for r in d["reviews"]:
                 r["user_name"] = names.get(r["user_id"], "User")
 
-        # Dynamic Notification Logic:
-        # If accepted and time reached, fire notification (logic flag)
         now = datetime.now(timezone.utc)
         if d["status"] == DateStatus.ACCEPTED and not d.get("notification_fired"):
             time_reached = now >= d["utc_timestamp"].replace(tzinfo=timezone.utc) if d["utc_timestamp"].tzinfo is None else now >= d["utc_timestamp"]
             if time_reached:
                 d["notification_fired"] = True
-                # In a real system, we would update DB here or trigger push
         
         return d
 

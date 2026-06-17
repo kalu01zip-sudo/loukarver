@@ -3,11 +3,36 @@ from typing import List, Optional
 
 from app.routers.auth import get_current_user
 from app.schemas.vibe_card import (
-    VibeCardDaily, VibeAnswerSubmit, VibeMatchResult, VibeStreakResponse, GenericResponse
+    VibeCardDaily, VibeAnswerSubmit, VibeMatchResult, VibeMultiMatchResult,
+    VibeStreakResponse, GenericResponse, VibeHistoryPaginatedResponse
 )
 from app.services.vibe_card import vibe_card_service
 
 router = APIRouter(prefix="/vibecheck/cards", tags=["VibeCheck Cards"])
+
+@router.get("/history", response_model=VibeHistoryPaginatedResponse)
+async def get_vibe_card_history(
+    partner_id: Optional[str] = Query(None),
+    category: str = Query("All", enum=["All", "Matched", "Differed"]),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    current_user: dict = Depends(get_current_user)
+):
+    """Fetch history of answers between user and partners. If partner_id is not provided, shows all partners."""
+    try:
+        data, total = await vibe_card_service.get_history(
+            current_user["id"], partner_id, category, page, size
+        )
+        return VibeHistoryPaginatedResponse(
+            success=True,
+            data=data,
+            total=total,
+            page=page,
+            size=size,
+            category=category
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/daily", response_model=VibeCardDaily)
 async def get_daily_cards(
@@ -39,15 +64,16 @@ async def submit_vibe_answers(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/results/{partner_id}", response_model=VibeMatchResult)
+@router.get("/results", response_model=VibeMultiMatchResult)
 async def get_vibe_results(
-    partner_id: str,
+    partner_id: Optional[str] = Query(None),
     timezone: str = Query("UTC"),
     current_user: dict = Depends(get_current_user)
 ):
-    """Compare today's results with a partner and see cumulative match score."""
+    """Compare today's results with partners. If partner_id is not provided, shows all connected partners who answered today."""
     try:
-        return await vibe_card_service.get_match_results(current_user["id"], partner_id, timezone)
+        results = await vibe_card_service.get_match_results(current_user["id"], partner_id, timezone)
+        return VibeMultiMatchResult(success=True, data=results)
     except ValueError as ve:
         raise HTTPException(status_code=400, detail=str(ve))
     except Exception as e:

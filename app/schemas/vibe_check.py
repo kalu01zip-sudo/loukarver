@@ -9,8 +9,18 @@ class VibeCheckProfileResponse(BaseModel):
     user_id: str
     name: str
     vibe_key: str
+    connect: int
+    active: int
+    active_users: List["PartnerStats"] = []
+    inactive: int
+    inactive_users: List["PartnerStats"] = []
     created_at: datetime
     updated_at: datetime
+
+class PartnerStats(BaseModel):
+    name: str
+    match_percentage: float
+    streak_days: int
 
 class VibeCheckConnection(BaseModel):
     user_id: str
@@ -45,3 +55,23 @@ class VibeCheckData(BaseModel):
 class VibeCheckGenericResponse(BaseModel):
     success: bool
     message: str
+
+# --- Invite System Schemas ---
+
+class VibeInviteResponse(BaseModel):
+    invite_code: str
+    invite_link: str
+
+class VibeInviteValidateResponse(BaseModel):
+    valid: bool
+    inviter_name: str
+    inviter_profile_picture: Optional[str] = None
+
+class VibeInviteAcceptRequest(BaseModel):
+    invite_code: str
+
+class VibeInviteAcceptResponse(BaseModel):
+    success: bool
+    message: str
+    partner_id: str
+    partner_name: str

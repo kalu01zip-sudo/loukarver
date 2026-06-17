@@ -223,6 +223,41 @@ async def change_password(payload: ChangePasswordRequest, current_user: dict = D
 @router.get("/me", response_model=UserMeResponse)
 async def get_me(current_user: dict = Depends(get_current_user)):
     """Retrieves current authenticated user's profile and relationship alignment details."""
+    from app.services.vibe_pulse import vibe_pulse_service
+    from app.schemas.vibe_pulse import PulseStatus
+    
+    # 1. Find if the user is Aligned with someone
+    user_id = current_user["id"]
+    # We look for a pulse where my status is ALIGNED and theirs is too
+    cursor = vibe_pulse_service.pulses.find({"user_id": user_id, "status": PulseStatus.ALIGNED})
+    my_aligned_docs = await cursor.to_list(length=None)
+    
+    is_aligned = False
+    partner_info = None
+    
+    for doc in my_aligned_docs:
+        p_id = doc["partner_id"]
+        # Check if they also aligned with me
+        their_doc = await vibe_pulse_service.pulses.find_one({
+            "user_id": p_id, 
+            "partner_id": user_id, 
+            "status": PulseStatus.ALIGNED
+        })
+        
+        if their_doc:
+            is_aligned = True
+            # Get partner profile
+            from app.services.vibe_check import vibe_check_service
+            p_profile = await vibe_check_service.get_profile(p_id)
+            partner_info = {
+                "id": p_id,
+                "name": p_profile["name"] if p_profile else "Unknown"
+            }
+            break # Found the one aligned partner
+            
+    current_user["is_aligned"] = is_aligned
+    current_user["partner"] = partner_info
+    
     return current_user
 
 @router.delete("/me")

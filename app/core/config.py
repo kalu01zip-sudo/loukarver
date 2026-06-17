@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     # Gemini Integration
     GEMINI_API_KEY: str = ""
     
+    FRONTEND_URL: str = ""
+    
     # Read from .env if present
     model_config = SettingsConfigDict(
         env_file=".env",
