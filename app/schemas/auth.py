@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, AliasChoices
+from pydantic import BaseModel, Field, AliasChoices, model_validator
 from typing import Optional, Dict, Any
 
 EMAIL_EXAMPLE = "x2@yopmail.com"
@@ -54,3 +54,9 @@ class UserMeResponse(BaseModel):
     model_config = {
         "populate_by_name": True
     }
+
+    @model_validator(mode="after")
+    def hide_secret_key_if_aligned(self) -> "UserMeResponse":
+        if self.is_aligned or self.partner:
+            self.secret_key = None
+        return self

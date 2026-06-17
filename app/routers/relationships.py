@@ -5,7 +5,7 @@ from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
-@router.get("", response_model=RelationshipResponse, status_code=status.HTTP_200_OK)
+@router.get("", response_model=RelationshipResponse, status_code=status.HTTP_200_OK, response_model_exclude_none=True)
 async def get_user_profile(current_user: dict = Depends(get_current_user)):
     """
     Retrieves the relationship profile details of the authenticated user.
@@ -23,7 +23,30 @@ async def get_user_profile(current_user: dict = Depends(get_current_user)):
             detail=f"An error occurred retrieving relationship data: {str(e)}"
         )
 
-@router.post("/create", response_model=RelationshipResponse, status_code=status.HTTP_201_CREATED)
+@router.get("/partner", response_model=RelationshipResponse, status_code=status.HTTP_200_OK, response_model_exclude_none=True)
+async def get_partner_profile(current_user: dict = Depends(get_current_user)):
+    """
+    Retrieves the relationship profile details of the aligned partner.
+    """
+    try:
+        data = await relationship_service.get_partner_details(current_user["id"])
+        return RelationshipResponse(
+            success=True,
+            message="Partner details retrieved successfully!",
+            data=data
+        )
+    except ValueError as ve:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ve)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred retrieving partner data: {str(e)}"
+        )
+
+@router.post("/create", response_model=RelationshipResponse, status_code=status.HTTP_201_CREATED, response_model_exclude_none=True)
 async def create_relationship(submission: RelationshipCreate, current_user: dict = Depends(get_current_user)):
     """
     Saves or updates the relationship profile details of the authenticated user.
@@ -47,7 +70,7 @@ async def create_relationship(submission: RelationshipCreate, current_user: dict
             detail=f"An error occurred saving relationship data: {str(e)}"
         )
 
-@router.post("/aligned", response_model=AlignResponse, status_code=status.HTTP_200_OK)
+@router.post("/aligned", response_model=AlignResponse, status_code=status.HTTP_200_OK, response_model_exclude_none=True)
 async def align_users(payload: AlignRequest, current_user: dict = Depends(get_current_user)):
     """
     Connects the authenticated user with another user using the partner's secret key.
@@ -74,7 +97,7 @@ async def align_users(payload: AlignRequest, current_user: dict = Depends(get_cu
             detail=f"An error occurred connecting users: {str(e)}"
         )
 
-@router.post("/break-alignment", response_model=AlignResponse, status_code=status.HTTP_200_OK)
+@router.post("/break-alignment", response_model=AlignResponse, status_code=status.HTTP_200_OK, response_model_exclude_none=True)
 async def break_alignment(current_user: dict = Depends(get_current_user)):
     """
     Breaks the connection between the authenticated user and their partner.

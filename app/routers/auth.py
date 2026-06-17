@@ -57,15 +57,11 @@ async def signup(payload: SignupRequest):
             detail=f"An error occurred during signup: {str(e)}"
         )
 
-@router.post("/verify-email")
+@router.post("/verify-email", response_model=TokenResponse)
 async def verify_email(payload: VerifyEmailRequest):
     """Verifies a user email using the 6-digit OTP code received during signup."""
     try:
-        await auth_service.verify_email(payload)
-        return {
-            "success": True,
-            "message": "Email verified successfully! You can now sign in."
-        }
+        return await auth_service.verify_email(payload)
     except ValueError as ve:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
     except Exception as e:
@@ -220,43 +216,17 @@ async def change_password(payload: ChangePasswordRequest, current_user: dict = D
             detail=f"An error occurred: {str(e)}"
         )
 
-@router.get("/me", response_model=UserMeResponse)
+@router.get("/me", response_model=UserMeResponse, response_model_exclude_none=True)
 async def get_me(current_user: dict = Depends(get_current_user)):
     """Retrieves current authenticated user's profile and relationship alignment details."""
-    from app.services.vibe_pulse import vibe_pulse_service
-    from app.schemas.vibe_pulse import PulseStatus
+    # Use the alignment status and partner info already stored in the user document
+    # which is fetched by get_current_user.
     
-    # 1. Find if the user is Aligned with someone
-    user_id = current_user["id"]
-    # We look for a pulse where my status is ALIGNED and theirs is too
-    cursor = vibe_pulse_service.pulses.find({"user_id": user_id, "status": PulseStatus.ALIGNED})
-    my_aligned_docs = await cursor.to_list(length=None)
+    # If is_aligned is True in the user document, we trust it.
+    # The partner info is also already in the user document.
     
-    is_aligned = False
-    partner_info = None
-    
-    for doc in my_aligned_docs:
-        p_id = doc["partner_id"]
-        # Check if they also aligned with me
-        their_doc = await vibe_pulse_service.pulses.find_one({
-            "user_id": p_id, 
-            "partner_id": user_id, 
-            "status": PulseStatus.ALIGNED
-        })
-        
-        if their_doc:
-            is_aligned = True
-            # Get partner profile
-            from app.services.vibe_check import vibe_check_service
-            p_profile = await vibe_check_service.get_profile(p_id)
-            partner_info = {
-                "id": p_id,
-                "name": p_profile["name"] if p_profile else "Unknown"
-            }
-            break # Found the one aligned partner
-            
-    current_user["is_aligned"] = is_aligned
-    current_user["partner"] = partner_info
+    # We can keep the vibe_pulse check as a fallback or for additional metadata if needed,
+    # but the primary source of truth for /users/aligned is the user document.
     
     return current_user
 

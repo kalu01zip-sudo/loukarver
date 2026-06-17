@@ -36,3 +36,41 @@ class AlignedCheckResponse(BaseModel):
     partner_id: Optional[str] = None
     partner_name: Optional[str] = None
     message: str
+
+# --- Flag System ---
+
+class FlagCategory(str, Enum):
+    GREEN = "Green"
+    RED = "Red"
+    YELLOW = "Yellow"
+
+class FlagType(str, Enum):
+    PUBLIC = "public"
+    PRIVATE = "private"
+
+class VibeFlagCreate(BaseModel):
+    partner_id: str
+    category: FlagCategory
+    type: FlagType
+    text: str
+    timezone: str = "UTC"
+
+class VibeFlagUpdate(BaseModel):
+    category: Optional[FlagCategory] = None
+    type: Optional[FlagType] = None
+    text: Optional[str] = None
+    timezone: Optional[str] = None
+
+class VibeFlagResponse(BaseModel):
+    id: str
+    user_id: str
+    partner_id: str
+    category: FlagCategory
+    type: FlagType
+    text: str
+    created_at: datetime
+    updated_at: datetime
+
+class VibeFlagListResponse(BaseModel):
+    success: bool
+    data: List[VibeFlagResponse]

@@ -126,10 +126,9 @@ class VibeCheckService:
             if not existing.get("vibe_key"):
                 update_data["vibe_key"] = await self.generate_unique_vibe_key()
                 
-            result = await self.profiles.find_one_and_update(
+            await self.profiles.update_one(
                 {"user_id": user_id},
-                {"$set": update_data},
-                return_document=True
+                {"$set": update_data}
             )
         else:
             vibe_key = await self.generate_unique_vibe_key()
@@ -141,10 +140,8 @@ class VibeCheckService:
                 "updated_at": now
             }
             await self.profiles.insert_one(doc)
-            result = doc
 
-        result["id"] = str(result["_id"])
-        return result
+        return await self.get_profile(user_id)
 
     async def get_connections(self, user_id: str) -> List[Dict[str, Any]]:
         """List all people this user is connected with in VibeCheck."""

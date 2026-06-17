@@ -7,6 +7,7 @@ class VibeQuestion(BaseModel):
     text: str
     option_a: str
     option_b: str
+    category: Optional[str] = "General"
 
 class VibeAnswer(BaseModel):
     question_id: str
@@ -68,6 +69,7 @@ class GenericResponse(BaseModel):
 class VibeHistoryEntry(BaseModel):
     date: str
     question: str
+    category: Optional[str] = "General"
     option_a: str
     option_b: str
     user_name: str
@@ -75,6 +77,30 @@ class VibeHistoryEntry(BaseModel):
     partner_name: str
     partner_answer: str
     is_match: bool
+
+# --- Analytics / Pulse Insights ---
+
+class CategoryMatch(BaseModel):
+    category: str
+    match_percentage: float
+    total_questions: int
+    matched_questions: int
+
+class PulseAnalytics(BaseModel):
+    partner_id: str
+    partner_name: str
+    cumulative_match_percent: float
+    total_questions_answered: int
+    matched_questions_count: int
+    overall_match_percentage: float
+    strongest_categories: List[CategoryMatch]
+    weakest_categories: List[CategoryMatch]
+    recent_matches: List[VibeHistoryEntry]
+    recent_differences: List[VibeHistoryEntry]
+
+class PulseAnalyticsResponse(BaseModel):
+    success: bool
+    data: List[PulseAnalytics]
 
 class VibeHistoryPaginatedResponse(BaseModel):
     success: bool

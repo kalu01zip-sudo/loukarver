@@ -140,7 +140,7 @@ class AuthService:
         
         return new_user
 
-    async def verify_email(self, payload: VerifyEmailRequest) -> bool:
+    async def verify_email(self, payload: VerifyEmailRequest) -> Dict[str, Any]:
         email = payload.email.lower()
         user = await self.collection.find_one({"email": email})
         if not user:
@@ -156,7 +156,17 @@ class AuthService:
             {"_id": user["_id"]},
             {"$set": {"is_verified": True}, "$unset": {"otp": ""}}
         )
-        return True
+        
+        # Generate tokens for immediate sign-in
+        token_data = {"user_id": str(user["_id"]), "email": email}
+        access_token = create_access_token(token_data)
+        refresh_token = create_refresh_token(token_data)
+        
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer"
+        }
 
     async def resend_otp(self, payload: ResendOtpRequest) -> bool:
         email = payload.email.lower()

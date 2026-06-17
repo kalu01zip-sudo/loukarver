@@ -33,15 +33,19 @@ class VibeCardService:
         """Uses Gemini to generate 12 'This or That' questions."""
         prompt = (
             "Generate 12 engaging 'This or That' questions for a social app. "
-            "Format the output as a JSON list of objects, each with 'text', 'option_a', and 'option_b'. "
+            "Format the output as a JSON list of objects, each with 'text', 'option_a', 'option_b', and 'category'. "
+            "Categories should be things like 'Travel', 'Communication', 'Lifestyle', 'Emotional', 'Social', 'Values', etc. "
             "Questions should be fun, lighthearted, and occasionally deep (e.g. 'Beach or Mountain', 'Plan everything or Wing it')."
         )
         
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={settings.GEMINI_API_KEY}"
+        # Use gemini-3.5-flash for 2026 compatibility
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key={settings.GEMINI_API_KEY}"
         headers = {"Content-Type": "application/json"}
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"response_mime_type": "application/json"}
+            "generationConfig": {
+                "responseMimeType": "application/json"
+            }
         }
 
         try:
@@ -49,21 +53,39 @@ class VibeCardService:
                 response = await client.post(url, json=payload, headers=headers)
                 if response.status_code == 200:
                     data = response.json()
-                    raw_text = data["candidates"][0]["content"]["parts"][0]["text"]
+                    raw_text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    
+                    # Robust parsing for JSON
+                    if "```json" in raw_text:
+                        raw_text = raw_text.split("```json")[1].split("```")[0].strip()
+                    elif "```" in raw_text:
+                        raw_text = raw_text.split("```")[1].split("```")[0].strip()
+                        
                     questions = json.loads(raw_text)
                     
                     # Add IDs
                     for q in questions:
                         q["id"] = str(uuid.uuid4())
                     return questions
+                else:
+                    print(f"Gemini API Error: {response.status_code} - {response.text}")
         except Exception as e:
             print(f"Gemini generation error: {e}")
         
-        # Static Fallback if Gemini fails
+        # Static Fallback if Gemini fails (diverse enough for some variety)
         return [
-            {"id": "f1", "text": "Weekend Vibes", "option_a": "City Break", "option_b": "Nature Escape"},
-            {"id": "f2", "text": "Communication", "option_a": "Texting", "option_b": "Voice Notes"},
-            {"id": "f3", "text": "Late Night", "option_a": "Movie Marathon", "option_b": "Deep Conversations"}
+            {"id": "f1", "text": "Weekend Vibes", "option_a": "City Break", "option_b": "Nature Escape", "category": "Travel"},
+            {"id": "f2", "text": "Communication", "option_a": "Texting", "option_b": "Voice Notes", "category": "Communication"},
+            {"id": "f3", "text": "Late Night", "option_a": "Movie Marathon", "option_b": "Deep Conversations", "category": "Lifestyle"},
+            {"id": "f4", "text": "Adventure", "option_a": "Skydiving", "option_b": "Scuba Diving", "category": "Social"},
+            {"id": "f5", "text": "Social Life", "option_a": "Big Party", "option_b": "Small Gathering", "category": "Social"},
+            {"id": "f6", "text": "Work Style", "option_a": "Early Bird", "option_b": "Night Owl", "category": "Lifestyle"},
+            {"id": "f7", "text": "Cuisine", "option_a": "Spicy", "option_b": "Sweet", "category": "Lifestyle"},
+            {"id": "f8", "text": "Travel", "option_a": "Solo Trip", "option_b": "Group Trip", "category": "Travel"},
+            {"id": "f9", "text": "Entertainment", "option_a": "Reading", "option_b": "Gaming", "category": "Lifestyle"},
+            {"id": "f10", "text": "Season", "option_a": "Summer", "option_b": "Winter", "category": "Travel"},
+            {"id": "f11", "text": "Morning", "option_a": "Coffee", "option_b": "Tea", "category": "Lifestyle"},
+            {"id": "f12", "text": "Habit", "option_a": "Journaling", "option_b": "Meditation", "category": "Emotional"}
         ]
 
     async def get_daily_questions(self, user_id: str, user_timezone: str = "UTC") -> List[Dict[str, Any]]:
@@ -88,8 +110,21 @@ class VibeCardService:
             except: # Concurrent insertion safety
                 pool_doc = await self.daily_pool.find_one({"date": today_str})
 
-        # Select same 3 questions for everyone today (e.g. first 3)
-        return pool_doc["questions"][:3]
+        # Select 3 questions for everyone today. 
+        # We use the day of the year to rotate through the 12 questions in the pool.
+        # This ensures variety even if the pool isn't regenerated frequently.
+        questions_pool = pool_doc["questions"]
+        if not questions_pool:
+            return []
+            
+        day_of_year = datetime.now(tz).timetuple().tm_yday
+        start_idx = (day_of_year % (len(questions_pool) // 3)) * 3
+        
+        # Ensure start_idx is valid
+        if start_idx + 3 > len(questions_pool):
+            start_idx = 0
+            
+        return questions_pool[start_idx : start_idx + 3]
 
     async def submit_answers(self, user_id: str, payload: VibeAnswerSubmit) -> Dict[str, Any]:
         """Submit daily answers and update streak."""
@@ -320,6 +355,7 @@ class VibeCardService:
                     history.append({
                         "date": date_str,
                         "question": q["text"],
+                        "category": q.get("category", "General"),
                         "option_a": q["option_a"],
                         "option_b": q["option_b"],
                         "user_name": user_name,
@@ -335,5 +371,136 @@ class VibeCardService:
         total = len(history)
         skip = (page - 1) * size
         return history[skip : skip + size], total
+
+    async def get_pulse_analytics(self, user_id: str, partner_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Provides detailed matching analytics across all partners or a specific one."""
+        # 1. Identify Partners
+        if partner_id:
+            partner_ids = [partner_id]
+        else:
+            cursor = self.vibe_connections.find({"user_id": user_id}, {"partner_id": 1})
+            conn_docs = await cursor.to_list(length=None)
+            partner_ids = [c["partner_id"] for c in conn_docs]
+
+        if not partner_ids:
+            return []
+
+        # 2. Fetch Partner Profiles
+        partner_profiles_cursor = self.vibe_profiles.find({"user_id": {"$in": partner_ids}})
+        partner_profiles_docs = await partner_profiles_cursor.to_list(length=None)
+        partner_map = {p["user_id"]: p["name"] for p in partner_profiles_docs}
+
+        analytics_results = []
+        my_ans_cursor = self.user_answers.find({"user_id": user_id})
+        my_all_answers = await my_ans_cursor.to_list(length=None)
+        my_dates_map = {a["date"]: a for a in my_all_answers}
+
+        pool_cache = {}
+
+        for p_id in partner_ids:
+            p_name = partner_map.get(p_id, "Unknown Partner")
+            
+            # Fetch partner's answers
+            pa_ans_cursor = self.user_answers.find({"user_id": p_id})
+            pa_all_answers = await pa_ans_cursor.to_list(length=None)
+            
+            common_dates = []
+            for pa_doc in pa_all_answers:
+                if pa_doc["date"] in my_dates_map:
+                    common_dates.append(pa_doc["date"])
+            
+            category_stats = {} # {category: {total: X, match: Y}}
+            all_history = []
+            
+            for date_str in common_dates:
+                if date_str not in pool_cache:
+                    pool_cache[date_str] = await self.daily_pool.find_one({"date": date_str})
+                
+                pool = pool_cache[date_str]
+                if not pool: continue
+                
+                my_ans = my_dates_map[date_str]
+                pa_ans = next(a for a in pa_all_answers if a["date"] == date_str)
+                
+                q_map = {q["id"]: q for q in pool["questions"]}
+                my_ans_map = {a["question_id"]: a["selected_option"] for a in my_ans["answers"]}
+                pa_ans_map = {a["question_id"]: a["selected_option"] for a in pa_ans["answers"]}
+                
+                for qid in list(my_ans_map.keys() & pa_ans_map.keys()):
+                    q = q_map.get(qid)
+                    if not q: continue
+                    
+                    cat = q.get("category", "General")
+                    if cat not in category_stats:
+                        category_stats[cat] = {"total": 0, "match": 0}
+                    
+                    my_choice = my_ans_map[qid]
+                    pa_choice = pa_ans_map[qid]
+                    is_match = (my_choice == pa_choice)
+                    
+                    category_stats[cat]["total"] += 1
+                    if is_match:
+                        category_stats[cat]["match"] += 1
+                    
+                    all_history.append({
+                        "date": date_str,
+                        "question": q["text"],
+                        "category": cat,
+                        "option_a": q["option_a"],
+                        "option_b": q["option_b"],
+                        "user_name": "Me",
+                        "user_answer": q["option_a"] if my_choice == "A" else q["option_b"],
+                        "partner_name": p_name,
+                        "partner_answer": q["option_a"] if pa_choice == "A" else q["option_b"],
+                        "is_match": is_match
+                    })
+
+            # Sort history by date
+            all_history.sort(reverse=True, key=lambda x: datetime.strptime(x["date"], "%m.%d.%Y"))
+            
+            recent_matches = [h for h in all_history if h["is_match"]][:5]
+            recent_differences = [h for h in all_history if not h["is_match"]][:5]
+            
+            # Calculate category matches
+            cat_list = []
+            for cat, s in category_stats.items():
+                percent = (s["match"] / s["total"] * 100) if s["total"] > 0 else 0
+                cat_list.append({
+                    "category": cat,
+                    "match_percentage": round(percent, 1),
+                    "total_questions": s["total"],
+                    "matched_questions": s["match"]
+                })
+            
+            cat_list.sort(key=lambda x: x["match_percentage"], reverse=True)
+            strongest = [c for c in cat_list if c["match_percentage"] >= 50][:3]
+            weakest = [c for c in cat_list if c["match_percentage"] < 50][:3]
+            # If strongest is empty, just take top 3
+            if not strongest: strongest = cat_list[:3]
+            # If weakest is empty, take bottom 3
+            if not weakest: weakest = cat_list[-3:] if len(cat_list) > 3 else []
+
+            total_q = sum(s["total"] for s in category_stats.values())
+            total_m = sum(s["match"] for s in category_stats.values())
+            overall_percent = (total_m / total_q * 100) if total_q > 0 else 0.0
+
+            # Get cumulative score
+            score_doc = await self.cumulative_scores.find_one({"user_id": user_id, "partner_id": p_id})
+            cumulative = score_doc["score"] if score_doc else 50.0
+
+            analytics_results.append({
+                "partner_id": p_id,
+                "partner_name": p_name,
+                "cumulative_match_percent": round(cumulative, 1),
+                "total_questions_answered": total_q,
+                "matched_questions_count": total_m,
+                "overall_match_percentage": round(overall_percent, 1),
+                "strongest_categories": strongest,
+                "weakest_categories": weakest,
+                "recent_matches": recent_matches,
+                "recent_differences": recent_differences
+            })
+
+        return analytics_results
 
 vibe_card_service = VibeCardService()

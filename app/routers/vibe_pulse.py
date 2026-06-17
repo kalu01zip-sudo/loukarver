@@ -1,10 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from typing import List
+from typing import List, Optional
 from app.routers.auth import get_current_user
 from app.schemas.vibe_pulse import (
-    VibePulseSetRequest, VibePulseResponse, VibePulseListResponse, AlignedCheckResponse
+    VibePulseSetRequest, VibePulseResponse, VibePulseListResponse, AlignedCheckResponse,
+    VibeFlagCreate, VibeFlagUpdate, VibeFlagResponse, VibeFlagListResponse
 )
+from app.schemas.vibe_card import PulseAnalyticsResponse
 from app.services.vibe_pulse import vibe_pulse_service
+from app.services.vibe_card import vibe_card_service
 
 router = APIRouter(prefix="/ladder", tags=["Vibe Pulse"])
 
@@ -51,5 +54,63 @@ async def delete_vibe_pulse(partner_id: str, current_user: dict = Depends(get_cu
         if not success:
              raise HTTPException(status_code=404, detail="Pulse status not found.")
         return {"success": True, "message": "Pulse status reset successfully."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/insights/analytics", response_model=PulseAnalyticsResponse)
+async def get_pulse_analytics(partner_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """Fetch detailed matching analytics for vibe partners."""
+    try:
+        data = await vibe_card_service.get_pulse_analytics(current_user["id"], partner_id)
+        return {"success": True, "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# --- Flag System Endpoints ---
+
+@router.post("/flags", response_model=VibeFlagResponse, status_code=status.HTTP_201_CREATED)
+async def create_flag(payload: VibeFlagCreate, current_user: dict = Depends(get_current_user)):
+    """Create a relationship flag (Green/Red/Yellow)."""
+    try:
+        return await vibe_pulse_service.create_flag(current_user["id"], payload)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/flags", response_model=VibeFlagListResponse)
+async def list_my_flags(partner_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """List flags created by the authenticated user."""
+    try:
+        data = await vibe_pulse_service.get_my_flags(current_user["id"], partner_id)
+        return {"success": True, "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/flags/partner/{partner_id}", response_model=VibeFlagListResponse)
+async def list_partner_flags(partner_id: str, current_user: dict = Depends(get_current_user)):
+    """List PUBLIC flags created by a partner about the authenticated user."""
+    try:
+        data = await vibe_pulse_service.get_partner_flags(current_user["id"], partner_id)
+        return {"success": True, "data": data}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/flags/{flag_id}", response_model=VibeFlagResponse)
+async def update_flag(flag_id: str, payload: VibeFlagUpdate, current_user: dict = Depends(get_current_user)):
+    """Update an existing flag."""
+    try:
+        return await vibe_pulse_service.update_flag(current_user["id"], flag_id, payload)
+    except ValueError as ve:
+        raise HTTPException(status_code=404, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/flags/{flag_id}")
+async def delete_flag(flag_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a flag."""
+    try:
+        success = await vibe_pulse_service.delete_flag(current_user["id"], flag_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Flag not found.")
+        return {"success": True, "message": "Flag deleted successfully."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

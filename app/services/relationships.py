@@ -274,4 +274,30 @@ class RelationshipService:
             
         return user
 
+    async def get_partner_details(self, user_id: str) -> Dict[str, Any]:
+        """Retrieves the details of the aligned partner."""
+        from bson import ObjectId
+        user = await self.collection.find_one({"_id": ObjectId(user_id)})
+        if not user:
+            raise ValueError("User not found.")
+            
+        if not user.get("is_aligned"):
+            raise ValueError("You are not aligned with any partner.")
+            
+        partner_info = user.get("partner")
+        if not partner_info or "user_id" not in partner_info:
+            raise ValueError("Partner information not found.")
+            
+        partner_id = partner_info["user_id"]
+        partner = await self.collection.find_one({"_id": ObjectId(partner_id)})
+        
+        if not partner:
+            raise ValueError("Partner record not found.")
+            
+        if "_id" in partner:
+            partner["id"] = str(partner["_id"])
+            partner["_id"] = str(partner["_id"])
+            
+        return partner
+
 relationship_service = RelationshipService()

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, AliasChoices, field_validator
+from pydantic import BaseModel, Field, AliasChoices, field_validator, model_validator
 import re
 import datetime
 from typing import Optional, Dict, Any
@@ -87,6 +87,12 @@ class RelationshipResponseData(BaseModel):
     model_config = {
         "populate_by_name": True
     }
+
+    @model_validator(mode="after")
+    def hide_secret_key_if_aligned(self) -> "RelationshipResponseData":
+        if self.is_aligned or self.partner:
+            self.secret_key = None
+        return self
 
 class RelationshipResponse(BaseModel):
     success: bool
